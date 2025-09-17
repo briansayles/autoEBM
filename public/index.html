@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Boundary Method</title>
+    <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+    <header>
+        <h1>Automated Energy Boundary Method</h1>
+    </header>
+    <div class="container">
+        <div id="instructions">
+            <h3>Instructions:</h3>
+            <ul>
+                <!-- <li>Select a customer from the dropdown menu.</li> -->
+                <li>Choose the required files to upload by clicking the "Choose File" buttons.</li>
+                <li>After selecting the files, click "Upload and Process".</li>
+                <li>The server will process the files and return a success or error message.</li>
+                <li>Please wait for the processing to complete; it may take some time depending on the file size.</li>
+                <!-- <li>Processed data files will be available in the server's output directory.</li> -->
+                <li>Links to the output files will be shown below, once processing is complete.</li>
+            </ul>
+        </div>
+        <h3>Upload Data Files:</h3>
+        <!-- <label for="fileInput">Energy Boundary Equipment Data File:</label>
+        <input type="file" id="fileInput" accept=".xlsx" /> -->
+        <!-- <div>
+            <select id="customerNameSelect">
+                <option value="">Select Customer</option>
+                <option value="Test Customer">Test Customer</option>
+                <option value="Ford TEVC">Ford TEVC</option>
+                <option value="Ford OHAP">Ford OHAP</option>
+                <option value="Ford KCAP">Ford KCAP</option>
+                <option value="Ford BOSK">Ford BOSK</option>
+                <option value="Ford BOBM">Ford BOBM</option>
+            </select>
+
+        </div> -->
+        <div id="equipmentFileInputDiv">
+            <label for="equipmentFileInput" type="fileSelector">Choose EBM Equipment Data File</label>
+            <input type="file" id="equipmentFileInput" accept=".xlsx" />
+            <span id="selectedFileName"></span>
+        </div>
+        <div id="customerConfigFileInputDiv"">
+            <label for="customerConfigFileInput" type="fileSelector">Choose Customer Config File</label>
+            <input type="file" id="customerConfigFileInput" accept=".json, .xlsx" />
+            <span id="selectedConfigFileName"></span>
+        </div>
+        <div id="customerTemplateFileInputDiv">
+            <label for="customerTemplateFileInput" type="fileSelector">Choose Label Template File</label>
+            <input type="file" id="customerTemplateFileInput" accept=".docx" />
+            <span id="selectedTemplateFileName"></span>
+        </div>
+        <h3>Options:</h3>
+        <input type="text" id="jobNumberInput" placeholder="Enter Job Number or Name (optional)" />
+        <div>
+            <label>
+                <input type="checkbox" id="noExcelCheckbox" />
+                Suppress Excel File Creation
+            </label>
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="noLabelsCheckbox" />
+                Suppress Word Labels Creation
+            </label>
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="noMergeCheckbox" />
+                Suppress Word Merge File Creation
+            </label>
+        </div>
+        <br/>
+        <button id="uploadButton">Upload and Process</button>
+        <div id="messages"></div>
+    </div>
+    <script src="scripts/app.js"></script>
+</body>
+</html>
