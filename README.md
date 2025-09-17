@@ -1,4 +1,4 @@
-# Web Front-End Project for Energy Boundary Method
+# Web-Based Project for Energy Boundary Method
 
 This project provides a web front-end interface that allows users to upload a data file and trigger the execution of the `applyEnergyBoundaryMethod` function from the backend. The application is built using Node.js and Express for the server-side, and HTML, CSS, and JavaScript for the client-side.
 
@@ -13,6 +13,7 @@ web-front-end
 │   └── scripts
 │       └── app.js          # Client-side JavaScript code
 ├── src
+|   |-- static_data.        # arcFlashBoundaries.json, EBM Static Values.xlsx, ebmStaticValues.json, shockBoundaries.json are stored here
 │   ├── server.js           # Entry point for the server-side application
 │   └── utils
 │       └── fileHandler.js   # Utility functions for handling file uploads
@@ -25,9 +26,11 @@ web-front-end
 
 1. **Clone the repository**:
    ```
-   git clone <repository-url>
-   cd web-front-end
+   git clone git@github.com:briansayles/autoEBM.git
+   cd autoEBM
    ```
+   create necessary files (proprietary data) in static_data folder
+
 
 2. **Install dependencies**:
    ```

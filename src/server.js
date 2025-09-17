@@ -3,7 +3,6 @@ import fileUpload from 'express-fileupload';
 import { applyEnergyBoundaryMethod } from './utils/autoEBM.js'; // Adjust the import based on your actual file structure
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { fileDownloadMiddleware } from './utils/fileHandler.js';
 import fs from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -92,17 +91,19 @@ app.post('/upload', async (req, res) => {
     console.log('------------------------------------');
 });
 
-app.get('/download', fileDownloadMiddleware);
+app.get('/download', async (req, res, next) => {
+  const filePath = req.query.filePath; // File path passed as a query parameter
 
-app.get('/customerData/:customerName', async (req, res) => {
-    const customerName = req.params.customerName;
-    const customerDataPath = path.join(__dirname, '../src/customers', customerName, '/customer_data/customerData.json');
-    try {
-        const data = await fs.readFile(customerDataPath, 'utf-8');
-        res.json(JSON.parse(data));
-    } catch (error) {
-        res.status(500).send({ message: 'Error reading customer data: ' + error.message });
-    }
+  if (!filePath) {
+      return res.status(400).send('File path is required.');
+  }
+
+  res.download(filePath, (err) => {
+      if (err) {
+          console.error('Error downloading file:', err.message);
+          return res.status(500).send('Error downloading file.');
+      }
+  });
 });
 
 // Start the server
