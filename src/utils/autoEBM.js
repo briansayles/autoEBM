@@ -1,12 +1,3 @@
- //
- // Call this from the server.js with 5 arguments
- //   dataFileName (string) = the path to the data file (JSON) containing entries to be processed
- //   noExcel (string true | false): setting this flag suppresses the creation of an Excel file summarizing the results
- //   noLabels (string true | false): setting this flag suppresses the creation of Word files for each label
- //   noMergeFile (string true | false): setting this flag suppresses the creation of a Word file compilation of all of the label files using the label_quantity field in the data file
- //   jobNumber (string) = job number to be used on labels and output filename
- //
-
 import { __dirname, __filename } from '../config.js';
 import ebmStaticValues from '../static_data/ebmStaticValues.json' with {type: 'json'};
 import shockBoundaries from '../static_data/shockBoundaries.json' with {type: 'json'};
@@ -27,25 +18,23 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   const createMergeFile = noMerge == 'false';
   jobNumber = jobNumber || "";
   ebmStaticValues.sort((a, b)=> b.kA - a.kA);
-  const ebmEntries = readEnergyBoundaryEntriesFromXLSX(dataFileName);
-  // console.log(`${__dirname}`)
-  // const customerPath = `${__dirname}/customers/${customerName}`;
-  // console.log(customerPath);
-  // const customerDataFileName = `${customerPath}/customer_data/customerData.json`;
-  // const customerDataJSON = await import(customerDataFileName, {with: {type: 'json'}})
+  let ebmEntries;
+  try {
+    ebmEntries = await readEnergyBoundaryEntriesFromXLSX(dataFileName);
+  } catch (error) {
+    return {
+      message: error.message,
+      error: true,
+      excelFilePath: null,
+      wordFilePath: null,
+      labelsZipPath: null
+    };
+  }
   const customerDataJSON = await import(configFileName, {with: {type: 'json'}});
   if (!customerDataJSON || !customerDataJSON.default || customerDataJSON.default.length == 0) {
     throw new Error(`Configuration file ${configFileName} is not valid. Please check the customer configuration.`);
   }
-  // const customerTemplateFileName = `${customerPath}/customer_data/${customerDataJSON.default[0].customer.template}`;
-  // console.log(customerTemplateFileName);
-  // if (!fs.existsSync(customerTemplateFileName)) {
-  //   throw new Error(`Template file ${customerTemplateFileName} does not exist. Please check the customer configuration.`);
-  // }
-  // console.log(`Using template file: ${customerTemplateFileName}`);
   const templateData = fs.readFileSync(templateFileName, "binary");
-
-
   const outputVariables = [];
   const excelOutputs = [];
   const customerData = customerDataJSON.default[0].customer;
@@ -54,35 +43,23 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   customerData.ie_breakpoints.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
   try {
       ebmEntries.end_use_equipment.forEach((equipmentItem, equipmentIndex, equipmentArray) => {
-        // console.log(`Processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}`);
-        // console.log(` - OCPD: ${equipmentItem.ocpd.amps}A ${equipmentItem.ocpd.type} (${equipmentItem.ocpd.class})`);
-        // console.log(` - Distance: ${convertToNumber(equipmentItem.distance_ft)} ft`);
-        // console.log(` - Source: ${equipmentItem.source}`);
-        // console.log(` - Location: ${equipmentItem.location}`);
-        // console.log(` - Label Quantity: ${equipmentItem.label_quantity}`);
         let recommendation = "";
         let recommendRK1 = false;
         let equipmentPPELevelRK1 = "";
         const source = sources.filter((source)=> source.name == equipmentItem.source)[0];
         if (!source) {
-          // console.log(` - No source found matching name ${equipmentItem.source}`);
           throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No source found matching name ${equipmentItem.source}. Please check the data file and customer data.`);
         }
-        // console.log(` - Source found: ${source.name} (${source.voltage} V, ${source.kA} kA)`);
         const ebmStaticLine = ebmStaticValues.filter((ebmStaticValue) => 
           (ebmStaticValue.kA <= source.kA) * (JSON.stringify(ebmStaticValue.ocpd) === JSON.stringify(equipmentItem.ocpd)) * (ebmStaticValue.voltage == source.voltage) 
         )[0];
         if (!ebmStaticLine) {
-          // console.log(` - No EBM static line found for source ${source.name} with ${source.kA} kA, ${source.voltage} V, and OCPD ${equipmentItem.ocpd.amps}A ${equipmentItem.ocpd.type} (${equipmentItem.ocpd.class})`);
           throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No EBM data found for source ${source.name} with ${source.kA} kA, ${source.voltage} V, and OCPD ${equipmentItem.ocpd.amps}A ${equipmentItem.ocpd.type} (${equipmentItem.ocpd.class}). Please check the data file and customer data.`);
         }
-        // console.log(` - EBM static line found: ${ebmStaticLine.kA} kA, ${ebmStaticLine.voltage} V, ${ebmStaticLine.ocpd.amps}A ${ebmStaticLine.ocpd.type} (${ebmStaticLine.ocpd.class})`);
         const equipmentWorkingDistance = ebmStaticLine.working_distance_in;
         const ieBreakPoints = ebmStaticLine.boundaries.filter((boundary) =>  ieArray.includes(boundary.calories));
         const equipmentIEBreakpoint = ieBreakPoints.filter(breakpoint => convertToNumber(breakpoint.distance_ft) >= convertToNumber(equipmentItem.distance_ft))[0]
         const equipmentPPELevel = customerData.ie_breakpoints.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpoint.calories)[0].name;
-        // console.log(`  - Equipment IE Breakpoint: ${equipmentIEBreakpoint.calories} cal/cm2`);
-        // console.log(`  - Equipment Required PPE Level: ${equipmentPPELevel}`);
         const equipmentMaxIE = equipmentIEBreakpoint.calories;
         if (equipmentMaxIE > ieBreakPoints[0].calories) {
           if(equipmentItem.ocpd.class == "RK5") {
@@ -111,9 +88,6 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
           recommendation = "";
           equipmentPPELevelRK1 = "";
         }
-        // console.log(`  - Recommendation: ${recommendation == "" ? "None" : recommendation}`);
-        // console.log(`  - Recommend RK1 Fuse? ${recommendRK1 ? "Yes" : "No"}`);
-        // console.log(`  - Equipment PPE Level with RK1 Fuse: ${equipmentPPELevelRK1 == "" ? "N/A" : equipmentPPELevelRK1}`);
         const equipmentShockBoundaries = shockBoundaries.filter(shockBoundary => shockBoundary.voltage_max >= source.voltage)[0];
         const equipmentLimitedApproachBoundaryInches = equipmentShockBoundaries.limited_approach_in;
         const equipmentRestrictedApproachBoundaryInches = equipmentShockBoundaries.restricted_approach_in;
@@ -188,7 +162,6 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   if (createExcel) {
     try {
       excelResult = await saveToExcel(excelOutputs, customerData, jobNumber, finishTimestamp);
-      // console.log(`Excel file created at: ${excelResult}`);
     } catch (err) {
       console.log(err.message);
     }
@@ -203,7 +176,6 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   if (createIndividualLabels) {
     try {
       const zipPath = await createLabelsZip(jobNumber, finishTimestamp);
-      // console.log(`Labels zip file created at: ${zipPath}`);
       wordResult.labelsZipPath = zipPath;
     } catch (err) {
       console.log(err.message);
@@ -220,27 +192,177 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   };
 }
 
-async function createLabelsZip(jobNumber, finishTimestamp) {
-  const labelsDir = `./output/${finishTimestamp}/individual labels`;
-  // const finishTimestamp = '(' + new Date().toISOString() + ')';
-  const zipPath = `./output/${finishTimestamp}/individual_labels ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}.zip`;
-
+async function saveToExcel(excelOutputs, customer, jobNumber, finishTimestamp) {
   return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    try {
+      const start = new Date().getTime();
+      const worksheet = XLSX.utils.json_to_sheet(excelOutputs);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'AF Results');
+      fs.mkdirSync(`./output/${finishTimestamp}`, { recursive: true });
+      const excelFilename = toFilenameFriendlyFormat(`${customer.name} AF Results ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
+      const filePath = `./output/${finishTimestamp}/${excelFilename}.xlsx`;
+      XLSX.writeFile(workbook, filePath);
+      const end = new Date().getTime();
+      const time = end - start;
+      console.log(`Save to Excel took ${time / 1000} seconds for ${excelOutputs.length} items.`);
+      resolve(filePath);
+    } catch (error) {
+      reject(new Error(`Error saving to Excel: ${error.message}`));
+    }
+  });
+}
 
-    output.on('close', () => {
-      console.log(`Created zip file at: ${zipPath} (${archive.pointer()} total bytes)`);
-      resolve(zipPath);
+async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber, finishTimestamp, templateFile) {
+  return new Promise((resolve, reject) => {
+    try {
+      var start = new Date().getTime();
+      fs.mkdirSync(`./output/${finishTimestamp}/individual labels/`, { recursive: true });
+      var docxFiles = [];
+      data.forEach((item, index, array) => {
+        if (item.varQuantity > 0) {
+          try {
+            var filename = toFilenameFriendlyFormat(`${item.varEquipmentName} ${jobNumber != "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
+            item.varLabelID = `${item.varEquipmentName}-${finishTimestamp}`;
+            const zip = new PizZip(templateFile);
+            var doc = new Docxtemplater(zip, {
+              parser: expressionParser,
+              linebreaks: true,
+              paragraphLoop: true,
+            });
+            doc.render(item);
+            var buffer = doc.toBuffer();
+            fs.writeFileSync(`./output/${finishTimestamp}/individual labels/${filename}.docx`, buffer, []);
+            if (createMergeFile) {
+              for (let i = 0; i < item.varQuantity; i++) {
+                docxFiles.push(buffer);
+              }
+            }
+          }
+          catch (err) {
+            console.error("Error: ", err.message);
+            reject(new Error(`Error creating label file for ${item.varEquipmentName}: ${err.message}`));
+            return;
+          }
+        }
+      });
+      var end = new Date().getTime();
+      var time = end - start;
+      console.log(`Creation of individual label files took ${time / 1000} seconds for ${data.length} items`);
+    
+      let mergeFilename = '';
+      if (createMergeFile && docxFiles.length > 0) {
+        start = new Date().getTime();
+        const docxMerger = new DocxMerger({}, docxFiles);
+        mergeFilename = toFilenameFriendlyFormat(`${customer.name} AF Labels ${jobNumber != "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
+        docxMerger.save('nodebuffer', (data) => {
+          fs.writeFileSync(`./output/${finishTimestamp}/${mergeFilename}.docx`, data, (err) => {
+            console.log(err.message);
+          });
+        });
+        end = new Date().getTime();
+        time = end - start;
+        console.log(`Mail merge execution took ${time / 1000} seconds for ${docxFiles.length} pages`);
+      }
+      resolve (
+        {
+          message: 'Mail merge complete',
+          mergeFilePath: createMergeFile ? `./output/${finishTimestamp}/${mergeFilename}.docx` : 'No merged file created'
+        }
+      )
+    } catch (error) {
+      console.log('Error during mail merge process:', error.message);
+      reject(new Error(`Error during mail merge process: ${error.message}`));
+    }
+  });
+}
+  
+async function createLabelsZip(jobNumber, finishTimestamp) {
+  return new Promise((resolve, reject) => {
+    try {
+      const labelsDir = `./output/${finishTimestamp}/individual labels`;
+      const zipPath = `./output/${finishTimestamp}/individual_labels ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}.zip`;
+      const output = fs.createWriteStream(zipPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      output.on('close', () => {
+        console.log(`Created zip file at: ${zipPath} (${archive.pointer()} total bytes)`);
+        resolve(zipPath);
+      });
+      archive.on('error', (err) => {
+        reject(err);
+      });
+      archive.pipe(output);
+      archive.directory(labelsDir, false);
+      archive.finalize();
+    } catch (error) {
+      reject(new Error(`Error creating labels zip: ${error.message}`));
+    }
+  });
+}
+
+async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
+  return new Promise((resolve, reject) => {
+    let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook;
+    try {
+      ebmEntryBook = XLSX.readFile(`${excelFilename}`);
+    } catch (error) {
+      reject(new Error(`Error reading Excel file ${excelFilename}: ${error.message}. Please ensure the file is a valid .xlsx file.`));
+      return;
+    };
+    try { 
+      ebmEntrySheet = ebmEntryBook.Sheets['Order Form']; 
+    } catch (error) {
+      reject(new Error(`Error accessing 'Order Form' sheet in Excel file ${excelFilename}: ${error.message}. Please ensure the sheet exists and is named correctly.`));
+      return;
+    };
+    try {
+      ebmEntriesJSON = XLSX.utils.sheet_to_json(ebmEntrySheet);
+    } catch (error) {
+      reject(new Error(`Error converting 'Order Form' sheet to JSON in Excel file ${excelFilename}: ${error.message}. Please ensure the sheet is properly formatted.`));
+      return;
+    };
+    if (!ebmEntriesJSON || ebmEntriesJSON.length == 0) {
+      reject(new Error(`No data found in 'Order Form' sheet of Excel file ${excelFilename}. Please ensure the sheet contains data.`));
+      return;
+    }
+    const ebmJSONData = [];
+    ebmEntriesJSON.forEach((entry) => {
+      try {
+          const name = entry['Title (Equipment Name)'];
+          const distance_ft = entry['Circuit Length (ft)'];
+          const source = entry['Source'];
+          const location = entry['Equipment Location (Columns)'];
+          const ampsSymbolIndex = entry['OCPD'].indexOf("A ");
+          const ocpdAmps = parseInt(entry['OCPD'].slice(0, ampsSymbolIndex)) || 0;
+          const ocpdType = entry['OCPD'].indexOf("Fuse") !== -1 ? "Fuse" : 
+            entry['OCPD'].indexOf("MCCB") !== -1 ? "MCCB" :
+            entry['OCPD'].indexOf("Force") !== -1 ? "FORCE" : "N/A";
+          const ocpdClass = entry['OCPD'].indexOf("Class RK5") !== -1 ? "RK5" :
+            entry['OCPD'].indexOf("Class RK1") !== -1 ? "RK1" : 
+            entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].slice(entry['OCPD'].indexOf("<= ") + 3, entry['OCPD'].indexOf(" cal/cm2")) : "N/A";
+          const label_quantity = entry['Label Quantity'];
+          if (!name || !distance_ft || !source || !location || !ocpdAmps || !ocpdType || !ocpdClass || !label_quantity) {
+            throw new Error(`Missing required field(s) in entry: ${JSON.stringify(entry)}. Please ensure all required fields are filled.`);
+          }
+          ebmJSONData.push({
+            name,
+            location,
+            distance_ft,
+            source,
+            ocpd: {
+              amps: ocpdAmps,
+              type: ocpdType,
+              class: ocpdClass
+            },
+            label_quantity
+          });
+      } catch (error) {
+        console.log('Error processing entry:', entry, error.message);
+        reject(new Error(`Error processing entry: ${JSON.stringify(entry)}. ${error.message}`));
+        return;
+      }  
     });
-
-    archive.on('error', (err) => {
-      reject(err);
-    });
-
-    archive.pipe(output);
-    archive.directory(labelsDir, false);
-    archive.finalize();
+    resolve({ end_use_equipment: ebmJSONData });
   });
 }
 
@@ -265,123 +387,4 @@ function convertToNumber(input) {
   } else if (typeof input === 'number') {
     return input;
   }
-}
-
-async function saveToExcel(excelOutputs, customer, jobNumber, finishTimestamp) {
-  const start = new Date().getTime();
-  const worksheet = XLSX.utils.json_to_sheet(excelOutputs);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'AF Results');
-  fs.mkdirSync(`./output/${finishTimestamp}`, { recursive: true });
-  // const finishTimestamp = '(' + new Date().toISOString() + ')';
-  const excelFilename = toFilenameFriendlyFormat(`${customer.name} AF Results ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
-  const filePath = `./output/${finishTimestamp}/${excelFilename}.xlsx`;
-  XLSX.writeFile(workbook, filePath);
-  const end = new Date().getTime();
-  const time = end - start;
-  console.log(`Save to Excel took ${time / 1000} seconds for ${excelOutputs.length} items.`);
-  return filePath;
-}
-
-async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber, finishTimestamp, templateFile) {
-  var start = new Date().getTime();
-  fs.mkdirSync(`./output/${finishTimestamp}/individual labels/`, { recursive: true });
-  // const content = fs.readFileSync(`${customerPath}/customer_data/${customer.template}`, "binary");
-  var docxFiles = [];
-  data.forEach((item, index, array) => {
-    if (item.varQuantity > 0) {
-      // var timestamp = '(' + new Date().toISOString().slice(0, 10) + ')';
-      var filename = toFilenameFriendlyFormat(`${item.varEquipmentName} ${jobNumber != "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
-      item.varLabelID = `${item.varEquipmentName}-${finishTimestamp}`;
-      // const zip = new PizZip(content);
-      const zip = new PizZip(templateFile);
-      var doc = new Docxtemplater(zip, {
-        parser: expressionParser,
-        linebreaks: true,
-        paragraphLoop: true,
-      });
-      doc.render(item);
-      var buffer = doc.toBuffer();
-      try {
-        fs.writeFileSync(`./output/${finishTimestamp}/individual labels/${filename}.docx`, buffer, []);
-        if (createMergeFile) {
-          for (let i = 0; i < item.varQuantity; i++) {
-            docxFiles.push(buffer);
-          }
-        }
-      }
-      catch (err) {
-        console.error("Error: ", err.message);
-      }
-    }
-  });
-  var end = new Date().getTime();
-  var time = end - start;
-  console.log(`Creation of individual label files took ${time / 1000} seconds for ${data.length} items`);
-
-  let mergeFilename = '';
-  if (createMergeFile && docxFiles.length > 0) {
-    start = new Date().getTime();
-    const docxMerger = new DocxMerger({}, docxFiles);
-    // const finishTimestamp = '(' + new Date().toISOString() + ')';
-    mergeFilename = toFilenameFriendlyFormat(`${customer.name} AF Labels ${jobNumber != "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
-    docxMerger.save('nodebuffer', (data) => {
-      fs.writeFileSync(`./output/${finishTimestamp}/${mergeFilename}.docx`, data, (err) => {
-        console.log(err.message);
-      });
-    });
-    end = new Date().getTime();
-    time = end - start;
-    console.log(`Mail merge execution took ${time / 1000} seconds for ${docxFiles.length} pages`);
-  }
-  return (
-    {
-      message: 'Mail merge complete',
-      mergeFilePath: createMergeFile ? `./output/${finishTimestamp}/${mergeFilename}.docx` : 'No merged file created'
-    }
-  )
-}
-
-function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
-  const ebmEntryBook = XLSX.readFile(`${excelFilename}`);  
-  const ebmEntrySheet = ebmEntryBook.Sheets['Order Form'];
-  const ebmEntriesJSON = XLSX.utils.sheet_to_json(ebmEntrySheet);
-  // console.log(`Read ${ebmEntriesJSON.length} entries from data file ${excelFilename}`);
-  // console.log(ebmEntriesJSON);
-  const ebmJSONData = [];
-  ebmEntriesJSON.forEach((entry) => {
-    try {
-        const name = entry['Title (Equipment Name)'];
-        const distance_ft = entry['Circuit Length (ft)'];
-        const source = entry['Source'];
-        const location = entry['Equipment Location (Columns)'];
-        const ampsSymbolIndex = entry['OCPD'].indexOf("A ");
-        const ocpdAmps = parseInt(entry['OCPD'].slice(0, ampsSymbolIndex)) || 0;
-        const ocpdType = entry['OCPD'].indexOf("Fuse") !== -1 ? "Fuse" : 
-          entry['OCPD'].indexOf("MCCB") !== -1 ? "MCCB" :
-          entry['OCPD'].indexOf("Force") !== -1 ? "FORCE" : "N/A";
-        const ocpdClass = entry['OCPD'].indexOf("Class RK5") !== -1 ? "RK5" :
-          entry['OCPD'].indexOf("Class RK1") !== -1 ? "RK1" : 
-          entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].slice(entry['OCPD'].indexOf("<= ") + 3, entry['OCPD'].indexOf(" cal/cm2")) : "N/A";
-        const label_quantity = entry['Label Quantity'];
-        if (!name || !distance_ft || !source || !location || !ocpdAmps || !ocpdType || !ocpdClass || !label_quantity) {
-          throw new Error(`Missing required field(s) in entry: ${JSON.stringify(entry)}. Please ensure all required fields are filled.`);
-        }
-        ebmJSONData.push({
-          name,
-          location,
-          distance_ft,
-          source,
-          ocpd: {
-            amps: ocpdAmps,
-            type: ocpdType,
-            class: ocpdClass
-          },
-          label_quantity
-        });
-    } catch (error) {
-      console.log('Error processing entry:', entry, error.message);
-  }  
-});
-  return { end_use_equipment: ebmJSONData };
 }

@@ -22,20 +22,16 @@ app.post('/upload', async (req, res) => {
     if (!req.files || Object.keys(req.files).length < 3) {
         return res.status(400).send({ message: 'Missing required files in upload.' });
     }
-    console.log('File upload received');
-    console.log(req.headers);
+    console.log('File upload(s) received');
     const dataFile = req.files.equipmentDataFile;
     const configFile = req.files.customerConfigFile;
     const templateFile = req.files.customerTemplateFile;
-
     if (!dataFile || !configFile || !templateFile) {
         return res.status(400).send({ message: 'Please upload all required files: equipmentDataFile, customerConfigFile, customerTemplateFile.' });
     }
-
-    console.log(`Received file: ${dataFile.name}`);
-    console.log(`Received config file: ${configFile.name}`);
-    console.log(`Received template file: ${templateFile.name}`);
-
+    // console.log(`Received file: ${dataFile.name}`);
+    // console.log(`Received config file: ${configFile.name}`);
+    // console.log(`Received template file: ${templateFile.name}`);
     // Save the uploaded file temporarily
     const uploadPath = path.join(__dirname, '../upload', dataFile.name);
     await dataFile.mv(uploadPath);
@@ -43,9 +39,6 @@ app.post('/upload', async (req, res) => {
     await configFile.mv(configUploadPath);
     const templateUploadPath = path.join(__dirname, '../upload', templateFile.name);
     await templateFile.mv(templateUploadPath);
-
-    console.log('Files saved to upload directory');
-
     try {
         // Call the applyEnergyBoundaryMethod function with the uploaded file and other parameters from headers
         const autoEBMResult = await applyEnergyBoundaryMethod({ 
