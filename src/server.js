@@ -20,14 +20,14 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Endpoint to handle file upload and process it
 app.post('/upload', async (req, res) => {
     if (!req.files || Object.keys(req.files).length < 3) {
-        return res.status(400).send({ message: 'Missing required files in upload.' });
+        return res.send({ message: 'Missing required files in upload.' });
     }
     console.log('File upload(s) received');
     const dataFile = req.files.equipmentDataFile;
     const configFile = req.files.customerConfigFile;
     const templateFile = req.files.customerTemplateFile;
     if (!dataFile || !configFile || !templateFile) {
-        return res.status(400).send({ message: 'Please upload all required files: equipmentDataFile, customerConfigFile, customerTemplateFile.' });
+        return res.send({ message: 'Please upload all required files: equipmentDataFile, customerConfigFile, customerTemplateFile.' });
     }
     // console.log(`Received file: ${dataFile.name}`);
     // console.log(`Received config file: ${configFile.name}`);
@@ -54,18 +54,9 @@ app.post('/upload', async (req, res) => {
         res.send(autoEBMResult);
     } catch (error) {
         res.status(500).send({ message: error.message });
-        await fs.unlink(uploadPath).catch((unlinkError) => {
-            console.error('Error deleting file:', unlinkError.message);
-        });
-        await fs.unlink(configUploadPath).catch((unlinkError) => {
-            console.error('Error deleting config file:', unlinkError.message);
-        });
-        await fs.unlink(templateUploadPath).catch((unlinkError) => {
-            console.error('Error deleting template file:', unlinkError.message);
-        });
-        return;}       
-    try {
-        // Delete the uploaded file after processing
+    } finally {
+        console.log('Processing complete, cleaning up uploaded files if not already deleted.');
+        // Delete the uploaded files after processing
         await fs.unlink(uploadPath).catch((unlinkError) => {
             console.error('Error deleting file:', unlinkError.message);
         });
@@ -76,9 +67,6 @@ app.post('/upload', async (req, res) => {
             console.error('Error deleting template file:', unlinkError.message);
         });
         console.log('Uploaded files deleted successfully.');
-
-    } catch (error) {
-        console.error('Error deleting files:', error.message);
     }
     console.log('Upload endpoint processing complete');
     console.log('------------------------------------');

@@ -9,6 +9,7 @@ import Docxtemplater from 'docxtemplater';
 import expressionParser from "docxtemplater/expressions.js";
 import DocxMerger from 'docx-merger';
 import archiver from 'archiver';
+import fsPromises from 'fs/promises';
 
 export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels, noMerge, jobNumber, configFileName, templateFileName} = {}) {
   const start0 = new Date().getTime();
@@ -23,18 +24,20 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
     ebmEntries = await readEnergyBoundaryEntriesFromXLSX(dataFileName);
   } catch (error) {
     return {
-      message: error.message,
-      error: true,
-      excelFilePath: null,
-      wordFilePath: null,
-      labelsZipPath: null
+        message: error.message,
+        error: true,
+        zipOutput: null,
     };
   }
   const customerDataJSON = await import(configFileName, {with: {type: 'json'}});
   if (!customerDataJSON || !customerDataJSON.default || customerDataJSON.default.length == 0) {
     throw new Error(`Configuration file ${configFileName} is not valid. Please check the customer configuration.`);
   }
-  const templateData = fs.readFileSync(templateFileName, "binary");
+  // const templateData = fs.readFileSync(templateFileName, "binary");
+  const templateData = await fsPromises.readFile(templateFileName, "binary");
+  if (!templateData) {
+    throw new Error(`Template file ${templateFileName} could not be read. Please check the template file.`);
+  }
   const outputVariables = [];
   const excelOutputs = [];
   const customerData = customerDataJSON.default[0].customer;
@@ -148,17 +151,17 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
       return {
         message: error.message,
         error: true,
-        excelFilePath: null,
-        wordFilePath: null,
-        labelsZipPath: null
+        zipOutput: null,
       };    
   }
   var end = new Date().getTime();
   var time = end - start;
   start = new Date().getTime();
   let excelResult;
-  let wordResult;  
-  const finishTimestamp = '(' + new Date().toISOString() + ')';
+  let wordResult;
+  let zipResult;
+  let zipOutput;
+  const finishTimestamp = new Date().toISOString().replace(/:/g, '-').slice(0,19);
   if (createExcel) {
     try {
       excelResult = await saveToExcel(excelOutputs, customerData, jobNumber, finishTimestamp);
@@ -173,51 +176,44 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
       console.log(err.message);
     }
   }
-  if (createIndividualLabels) {
-    try {
-      const zipPath = await createLabelsZip(jobNumber, finishTimestamp);
-      wordResult.labelsZipPath = zipPath;
-    } catch (err) {
-      console.log(err.message);
-    }
+  try {
+    zipOutput = await createOutputZip(jobNumber, finishTimestamp, dataFileName);  
+  } catch (err) {
+    console.log(err.message);
   }
+
   end = new Date().getTime();
   time = end - start0;
   return {
     message: `autoEBM processing complete for ${ebmEntries.end_use_equipment.length} entries in ${time/1000} seconds`, 
     error: false,
-    excelFilePath: excelResult,
-    wordFilePath: createMergeFile ? wordResult.mergeFilePath : null,
-    labelsZipPath: createIndividualLabels ? wordResult.labelsZipPath : null
+    zipOutput: zipOutput,
   };
 }
 
 async function saveToExcel(excelOutputs, customer, jobNumber, finishTimestamp) {
-  return new Promise((resolve, reject) => {
     try {
+      await fsPromises.mkdir(`./output/${finishTimestamp}`, { recursive: true });
       const start = new Date().getTime();
       const worksheet = XLSX.utils.json_to_sheet(excelOutputs);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'AF Results');
-      fs.mkdirSync(`./output/${finishTimestamp}`, { recursive: true });
       const excelFilename = toFilenameFriendlyFormat(`${customer.name} AF Results ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
       const filePath = `./output/${finishTimestamp}/${excelFilename}.xlsx`;
       XLSX.writeFile(workbook, filePath);
       const end = new Date().getTime();
       const time = end - start;
       console.log(`Save to Excel took ${time / 1000} seconds for ${excelOutputs.length} items.`);
-      resolve(filePath);
+      return(filePath);
     } catch (error) {
-      reject(new Error(`Error saving to Excel: ${error.message}`));
+      return (error.message);
     }
-  });
 }
 
 async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber, finishTimestamp, templateFile) {
-  return new Promise((resolve, reject) => {
+  await fsPromises.mkdir(`./output/${finishTimestamp}/individual labels/`, { recursive: true });
     try {
       var start = new Date().getTime();
-      fs.mkdirSync(`./output/${finishTimestamp}/individual labels/`, { recursive: true });
       var docxFiles = [];
       data.forEach((item, index, array) => {
         if (item.varQuantity > 0) {
@@ -232,7 +228,7 @@ async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber,
             });
             doc.render(item);
             var buffer = doc.toBuffer();
-            fs.writeFileSync(`./output/${finishTimestamp}/individual labels/${filename}.docx`, buffer, []);
+            fsPromises.writeFile(`./output/${finishTimestamp}/individual labels/${filename}.docx`, buffer, []);
             if (createMergeFile) {
               for (let i = 0; i < item.varQuantity; i++) {
                 docxFiles.push(buffer);
@@ -241,7 +237,6 @@ async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber,
           }
           catch (err) {
             console.error("Error: ", err.message);
-            reject(new Error(`Error creating label file for ${item.varEquipmentName}: ${err.message}`));
             return;
           }
         }
@@ -264,7 +259,7 @@ async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber,
         time = end - start;
         console.log(`Mail merge execution took ${time / 1000} seconds for ${docxFiles.length} pages`);
       }
-      resolve (
+      return (
         {
           message: 'Mail merge complete',
           mergeFilePath: createMergeFile ? `./output/${finishTimestamp}/${mergeFilename}.docx` : 'No merged file created'
@@ -272,58 +267,57 @@ async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber,
       )
     } catch (error) {
       console.log('Error during mail merge process:', error.message);
-      reject(new Error(`Error during mail merge process: ${error.message}`));
+      return {
+        message: `Error during mail merge process: ${error.message}`,
+        mergeFilePath: null,
+      };
     }
-  });
 }
-  
-async function createLabelsZip(jobNumber, finishTimestamp) {
+
+async function createOutputZip(jobNumber, finishTimestamp, dataFileName) {
+  const outputDir = `./output/${finishTimestamp}`;
+  const zipPath = `./output/autoEBM Output ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}.zip`;
   return new Promise((resolve, reject) => {
-    try {
-      const labelsDir = `./output/${finishTimestamp}/individual labels`;
-      const zipPath = `./output/${finishTimestamp}/individual_labels ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}.zip`;
-      const output = fs.createWriteStream(zipPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      output.on('close', () => {
-        console.log(`Created zip file at: ${zipPath} (${archive.pointer()} total bytes)`);
-        resolve(zipPath);
-      });
-      archive.on('error', (err) => {
-        reject(err);
-      });
-      archive.pipe(output);
-      archive.directory(labelsDir, false);
-      archive.finalize();
-    } catch (error) {
-      reject(new Error(`Error creating labels zip: ${error.message}`));
-    }
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    output.on('close', () => {
+      console.log(`Created output zip file at: ${zipPath} (${archive.pointer()} total bytes)`);
+      resolve(zipPath);
+      fsPromises.rmdir(outputDir, { recursive: true }).then(() => {
+        console.log(`Cleaned up output directory: ${outputDir}`);
+      }).catch((err) => {
+        console.error(`Error removing output directory ${outputDir}:`, err.message);
+      }) 
+    });
+    archive.on('error', (err) => {
+      reject(err);
+    });
+    archive.pipe(output);
+    archive.directory(outputDir, false);
+    archive.file(dataFileName, { name: `Uploaded Data File ${dataFileName.split('/').pop()}` });
+    archive.finalize();
   });
 }
 
 async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
-  return new Promise((resolve, reject) => {
     let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook;
     try {
       ebmEntryBook = XLSX.readFile(`${excelFilename}`);
     } catch (error) {
-      reject(new Error(`Error reading Excel file ${excelFilename}: ${error.message}. Please ensure the file is a valid .xlsx file.`));
-      return;
+      return (error.message);
     };
     try { 
       ebmEntrySheet = ebmEntryBook.Sheets['Order Form']; 
     } catch (error) {
-      reject(new Error(`Error accessing 'Order Form' sheet in Excel file ${excelFilename}: ${error.message}. Please ensure the sheet exists and is named correctly.`));
-      return;
+      return (error.message);
     };
     try {
       ebmEntriesJSON = XLSX.utils.sheet_to_json(ebmEntrySheet);
     } catch (error) {
-      reject(new Error(`Error converting 'Order Form' sheet to JSON in Excel file ${excelFilename}: ${error.message}. Please ensure the sheet is properly formatted.`));
-      return;
+      return (error.message);
     };
     if (!ebmEntriesJSON || ebmEntriesJSON.length == 0) {
-      reject(new Error(`No data found in 'Order Form' sheet of Excel file ${excelFilename}. Please ensure the sheet contains data.`));
-      return;
+      return (new Error(`Data file ${excelFilename} is not valid or contains no data. Please check the data file.`));
     }
     const ebmJSONData = [];
     ebmEntriesJSON.forEach((entry) => {
@@ -358,12 +352,12 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
           });
       } catch (error) {
         console.log('Error processing entry:', entry, error.message);
-        reject(new Error(`Error processing entry: ${JSON.stringify(entry)}. ${error.message}`));
-        return;
+        // reject(new Error(`Error processing entry: ${JSON.stringify(entry)}. ${error.message}`));
+        return (null);
       }  
     });
-    resolve({ end_use_equipment: ebmJSONData });
-  });
+    return({ end_use_equipment: ebmJSONData });
+  // });
 }
 
 function toFilenameFriendlyFormat(input) {

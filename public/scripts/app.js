@@ -52,7 +52,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     uploadButton.addEventListener('click', async function() {
-        // uploadButton.textContent = 'Processing...';
         uploadButton.disabled = true;
         equipmentFileInput.disabled = true;
         customerConfigFileInput.disabled = true;
@@ -64,7 +63,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const formData = new FormData();
-        // formData.append('customerName', customerNameSelect.value);
         formData.append('equipmentDataFile', equipmentFileInput.files[0]);
         formData.append('customerConfigFile', document.getElementById('customerConfigFileInput').files[0]);
         formData.append('customerTemplateFile', document.getElementById('customerTemplateFileInput').files[0]);
@@ -90,34 +88,14 @@ document.addEventListener('DOMContentLoaded', function() {
             customerConfigFileInput.disabled = false;
             customerTemplateFileInput.disabled = false;
             if (result.error) {
-                // equipmentFileInput.value = ''; // Clear the file input
-                // customerConfigFileInput.value = '';
-                // customerTemplateFileInput.value = '';
-                // selectedFileNameSpan.textContent = '';
-                // selectedConfigFileNameSpan.textContent = '';
-                // selectedTemplateFileNameSpan.textContent = '';
                 updateUploadButtonState();
             }
             messagesDiv.textContent = `${result.message}`;
             messagesDiv.appendChild(document.createElement('br'));
-            if (result.excelFilePath) {
+            if (result.zipOutput) {
                 const downloadLink = document.createElement('a');
-                downloadLink.href = `/download?filePath=${encodeURIComponent(result.excelFilePath)}`;
-                downloadLink.textContent = 'Excel Summary File';
-                messagesDiv.appendChild(document.createElement('br'));
-                messagesDiv.appendChild(downloadLink);
-            }
-            if (result.wordFilePath) {
-                const downloadLink = document.createElement('a');
-                downloadLink.href = `/download?filePath=${encodeURIComponent(result.wordFilePath)}`;
-                downloadLink.textContent = 'Word Merge File';
-                messagesDiv.appendChild(document.createElement('br'));
-                messagesDiv.appendChild(downloadLink);
-            }
-            if (result.labelsZipPath) {
-                const downloadLink = document.createElement('a');
-                downloadLink.href = `/download?filePath=${encodeURIComponent(result.labelsZipPath)}`;
-                downloadLink.textContent = 'Labels Zip File';
+                downloadLink.href = `/download?filePath=${encodeURIComponent(result.zipOutput)}`;
+                downloadLink.textContent = 'AutoEBM Results File';
                 messagesDiv.appendChild(document.createElement('br'));
                 messagesDiv.appendChild(downloadLink);
             }
@@ -125,7 +103,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('There was an error:'  , error);
             messagesDiv.textContent = `Error: ${error}`;
         }
-        // uploadButton.textContent = 'Upload and Process';
         updateUploadButtonState();
     });
 
