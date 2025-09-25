@@ -19,15 +19,15 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Endpoint to handle file upload and process it
 app.post('/upload', async (req, res) => {
-    if (!req.files || Object.keys(req.files).length < 3) {
+    if (!req.files || Object.keys(req.files).length < 2) {
         return res.send({ message: 'Missing required files in upload.' });
     }
     console.log('File upload(s) received');
     const dataFile = req.files.equipmentDataFile;
-    const configFile = req.files.customerConfigFile;
+    // const configFile = req.files.customerConfigFile;
     const templateFile = req.files.customerTemplateFile;
-    if (!dataFile || !configFile || !templateFile) {
-        return res.send({ message: 'Please upload all required files: equipmentDataFile, customerConfigFile, customerTemplateFile.' });
+    if (!dataFile || !templateFile) {
+        return res.send({ message: 'Please upload all required files: equipmentDataFile, customerTemplateFile.' });
     }
     // console.log(`Received file: ${dataFile.name}`);
     // console.log(`Received config file: ${configFile.name}`);
@@ -35,8 +35,8 @@ app.post('/upload', async (req, res) => {
     // Save the uploaded file temporarily
     const uploadPath = path.join(__dirname, '../upload', dataFile.name);
     await dataFile.mv(uploadPath);
-    const configUploadPath = path.join(__dirname, '../upload', configFile.name);
-    await configFile.mv(configUploadPath);
+    // const configUploadPath = path.join(__dirname, '../upload', configFile.name);
+    // await configFile.mv(configUploadPath);
     const templateUploadPath = path.join(__dirname, '../upload', templateFile.name);
     await templateFile.mv(templateUploadPath);
     try {
@@ -48,7 +48,7 @@ app.post('/upload', async (req, res) => {
             noLabels: req.headers.nolabels, 
             noMerge: req.headers.nomerge,
             // customerName: req.headers.customername,
-            configFileName: configUploadPath,
+            // configFileName: configUploadPath,
             templateFileName: templateUploadPath
         });
         res.send(autoEBMResult);
@@ -60,9 +60,9 @@ app.post('/upload', async (req, res) => {
         await fs.unlink(uploadPath).catch((unlinkError) => {
             console.error('Error deleting file:', unlinkError.message);
         });
-        await fs.unlink(configUploadPath).catch((unlinkError) => {
-            console.error('Error deleting config file:', unlinkError.message);
-        });
+        // await fs.unlink(configUploadPath).catch((unlinkError) => {
+        //     console.error('Error deleting config file:', unlinkError.message);
+        // });
         await fs.unlink(templateUploadPath).catch((unlinkError) => {
             console.error('Error deleting template file:', unlinkError.message);
         });

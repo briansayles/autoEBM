@@ -11,7 +11,7 @@ import DocxMerger from 'docx-merger';
 import archiver from 'archiver';
 import fsPromises from 'fs/promises';
 
-export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels, noMerge, jobNumber, configFileName, templateFileName} = {}) {
+export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels, noMerge, jobNumber, templateFileName} = {}) {
   const start0 = new Date().getTime();
   var start = new Date().getTime();
   const createExcel = noExcel == 'false'
@@ -29,40 +29,66 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         zipOutput: null,
     };
   }
-  const customerDataJSON = await import(configFileName, {with: {type: 'json'}});
-  if (!customerDataJSON || !customerDataJSON.default || customerDataJSON.default.length == 0) {
-    throw new Error(`Configuration file ${configFileName} is not valid. Please check the customer configuration.`);
-  }
+  // const customerDataJSON = await import(configFileName, {with: {type: 'json'}});
+  // if (!customerDataJSON || !customerDataJSON.default || customerDataJSON.default.length == 0) {
+  //   throw new Error(`Configuration file ${configFileName} is not valid. Please check the customer configuration.`);
+  // }
   const templateData = await fsPromises.readFile(templateFileName, "binary");
   if (!templateData) {
     throw new Error(`Template file ${templateFileName} could not be read. Please check the template file.`);
   }
   const outputVariables = [];
   const excelOutputs = [];
-  const customerData = customerDataJSON.default[0].customer;
-  const sources = customerData.sources;
+  // const customerData = customerDataJSON.default[0].customer;
+  // const sources = customerData.sources;
+  // console.log('sources:' + JSON.stringify(sources));
+  // console.log('sources from Excel: ' + JSON.stringify(ebmEntries.sources));
+  const customerName = ebmEntries.customer;
+  const sources = ebmEntries.sources;
   const ieArray = [];
-  customerData.ie_breakpoints.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
+  ebmEntries.AFIEs.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
+  // customerData.ie_breakpoints.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
+  console.log(ieArray);
   try {
       ebmEntries.end_use_equipment.forEach((equipmentItem, equipmentIndex, equipmentArray) => {
         let recommendation = "";
         let recommendRK1 = false;
         let equipmentPPELevelRK1 = "";
-        const source = sources.filter((source)=> source.name == equipmentItem.source)[0];
+        let source;
+        let ebmStaticLine;
+        let equipmentIEBreakpoint;
+        let equipmentMaxIE;
+        let equipmentPPELevel;
+        let equipmentWorkingDistance;
+        let ieBreakPoints;
+        console.log(`Processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}`);
+        if (equipmentItem.ocpd.type.indexOf("Force") == -1) {
+          source = sources.filter((source)=> source.name == equipmentItem.source)[0];
+        } else {
+          console.log('Creating new source for FORCE OCPD type');
+          const sourceVoltage = parseInt(equipmentItem.ocpd.type.match(/@ (.*?)V/)[1]);
+          console.log(equipmentItem.ocpd.type, sourceVoltage);
+          source = {
+            name: equipmentItem.source,
+            kA: 0,
+            voltage: sourceVoltage
+          }
+        }
         if (!source) {
           throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No source found matching name ${equipmentItem.source}. Please check the data file and customer data.`);
         }
-        const ebmStaticLine = ebmStaticValues.filter((ebmStaticValue) => 
-          (ebmStaticValue.kA <= source.kA) * (JSON.stringify(ebmStaticValue.ocpd) === JSON.stringify(equipmentItem.ocpd)) * (ebmStaticValue.voltage == source.voltage) 
+        console.log(JSON.stringify(equipmentItem.ocpd));
+        ebmStaticLine = ebmStaticValues.filter((ebmStaticValue) => 
+          (ebmStaticValue.kA <= source.kA) * (JSON.stringify(ebmStaticValue.ocpd) == JSON.stringify(equipmentItem.ocpd)) * (ebmStaticValue.voltage == source.voltage) 
         )[0];
         if (!ebmStaticLine) {
           throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No EBM data found for source ${source.name} with ${source.kA} kA, ${source.voltage} V, and OCPD ${equipmentItem.ocpd.amps}A ${equipmentItem.ocpd.type} (${equipmentItem.ocpd.class}). Please check the data file and customer data.`);
         }
-        const equipmentWorkingDistance = ebmStaticLine.working_distance_in;
-        const ieBreakPoints = ebmStaticLine.boundaries.filter((boundary) =>  ieArray.includes(boundary.calories));
-        const equipmentIEBreakpoint = ieBreakPoints.filter(breakpoint => convertToNumber(breakpoint.distance_ft) >= convertToNumber(equipmentItem.distance_ft))[0]
-        const equipmentPPELevel = customerData.ie_breakpoints.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpoint.calories)[0].name;
-        const equipmentMaxIE = equipmentIEBreakpoint.calories;
+        equipmentWorkingDistance = ebmStaticLine.working_distance_in;
+        ieBreakPoints = ebmStaticLine.boundaries.filter((boundary) =>  ieArray.includes(boundary.calories));
+        equipmentIEBreakpoint = ieBreakPoints.filter(breakpoint => convertToNumber(breakpoint.distance_ft) >= convertToNumber(equipmentItem.distance_ft))[0]
+        equipmentPPELevel = ebmEntries.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpoint.calories)[0].name;
+        equipmentMaxIE = equipmentIEBreakpoint.calories;
         if (equipmentMaxIE > ieBreakPoints[0].calories) {
           if(equipmentItem.ocpd.class == "RK5") {
             recommendation = `Warning: Calculated max IE of ${equipmentMaxIE} cal/cm2 exceeds customer's minimum PPE level of ${ieBreakPoints[0].calories} cal/cm2.`; 
@@ -72,9 +98,9 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
             const ieBreakPointsRK1 = ebmStaticLineRK1.boundaries.filter((boundary) =>  ieArray.includes(boundary.calories));
             const equipmentIEBreakpointRK1 = ieBreakPointsRK1.filter(breakpoint => convertToNumber(breakpoint.distance_ft) >= convertToNumber(equipmentItem.distance_ft))[0]
             const equipmentMaxIERK1 = equipmentIEBreakpointRK1.calories;
-            equipmentPPELevelRK1 = customerData.ie_breakpoints.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpointRK1.calories)[0].name;
+            equipmentPPELevelRK1 = ebmEntries.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpointRK1.calories)[0].name;
             if (equipmentMaxIERK1 < equipmentMaxIE) {
-              recommendation += ` Using a class RK1 fuse will reduce the required PPE level from ${equipmentPPELevel} to ${customerData.ie_breakpoints.filter(ie_breakpoint => ie_breakpoint.calories == equipmentMaxIERK1)[0].name}.`;
+              recommendation += ` Using a class RK1 fuse will reduce the required PPE level from ${equipmentPPELevel} to ${ebmEntries.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentMaxIERK1)[0].name}.`;
               recommendRK1 = true;
             } else {
               recommendation += ` Using a class RK1 will not reduce the required PPE level from ${equipmentPPELevel}.`;
@@ -95,10 +121,12 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         const equipmentRestrictedApproachBoundaryInches = equipmentShockBoundaries.restricted_approach_in;
         const equipmentArcFlashBoundaryInches = arcFlashBoundaries.filter(
           arcFlashBoundary => (arcFlashBoundary.voltage_max >= source.voltage) * (arcFlashBoundary.equipment_type == "Equipment"))[0].boundaries.filter(bndry => bndry.calories == equipmentIEBreakpoint.calories)[0].distance_in;
-        outputVariables.push(
+        const today = new Date();
+          outputVariables.push(
           {
             dataProvided: equipmentItem,
             timestamp: new Date().toISOString(),
+            datestamp: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
             varAFB: equipmentArcFlashBoundaryInches,
             varAFBFeetInches: toFeetInches(equipmentArcFlashBoundaryInches),
             varVoltage: source.voltage,
@@ -166,14 +194,14 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
 
   if (createExcel) {
     try {
-      excelResult = await saveToExcel(excelOutputs, customerData, jobNumber, finishTimestamp, outputFilePath);
+      excelResult = await saveToExcel(excelOutputs, customerName, jobNumber, finishTimestamp, outputFilePath);
     } catch (err) {
       console.log(err.message);
     }
   }
   if (createIndividualLabels) {
     try {
-      wordResult = await generateMailMergeDOCX(outputVariables, customerData, createMergeFile, jobNumber, finishTimestamp, templateData, outputFilePath);
+      wordResult = await generateMailMergeDOCX(outputVariables, customerName, createMergeFile, jobNumber, finishTimestamp, templateData, outputFilePath);
     } catch (err) {
       console.log(err.message);
     }
@@ -193,14 +221,14 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   };
 }
 
-async function saveToExcel(excelOutputs, customer, jobNumber, finishTimestamp, filePath) {
+async function saveToExcel(excelOutputs, customerName, jobNumber, finishTimestamp, filePath) {
   try {
     console.log(`Saving to Excel at ${filePath}`);
     const start = new Date().getTime();
     const worksheet = XLSX.utils.json_to_sheet(excelOutputs);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'AF Results');
-    const excelFilename = toFilenameFriendlyFormat(`${customer.name} AF Results ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
+    const excelFilename = toFilenameFriendlyFormat(`${customerName} AF Results ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
     XLSX.writeFile(workbook, `${filePath}/${excelFilename}.xlsx`);
     const end = new Date().getTime();
     const time = end - start;
@@ -211,7 +239,7 @@ async function saveToExcel(excelOutputs, customer, jobNumber, finishTimestamp, f
   }
 }
 
-async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber, finishTimestamp, templateFile, filePath) {
+async function generateMailMergeDOCX(data, customerName, createMergeFile, jobNumber, finishTimestamp, templateFile, filePath) {
   try {
     var start = new Date().getTime();
     var docxFiles = [];
@@ -249,7 +277,7 @@ async function generateMailMergeDOCX(data, customer, createMergeFile, jobNumber,
     if (createMergeFile && docxFiles.length > 0) {
       start = new Date().getTime();
       const docxMerger = new DocxMerger({}, docxFiles);
-      mergeFilename = toFilenameFriendlyFormat(`${customer.name} AF Labels ${jobNumber != "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
+      mergeFilename = toFilenameFriendlyFormat(`${customerName} AF Labels ${jobNumber != "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
       docxMerger.save('nodebuffer', (data) => {
         fs.writeFileSync(`${filePath}/${mergeFilename}.docx`, data, (err) => {
           console.log(err.message);
@@ -299,7 +327,7 @@ async function createOutputZip(jobNumber, finishTimestamp, dataFileName, filePat
 }
 
 async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
-    let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook;
+    let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook, customerDataSheet, sourcesDataSheet, AFIEsDataSheet, customer, sources, AFIEs;
     try {
       ebmEntryBook = XLSX.readFile(`${excelFilename}`);
     } catch (error) {
@@ -309,6 +337,25 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
       ebmEntrySheet = ebmEntryBook.Sheets['Order Form']; 
     } catch (error) {
       return (error.message);
+    };
+    try { 
+      customerDataSheet = ebmEntryBook.Sheets['Customer']; 
+      customer = XLSX.utils.sheet_to_json(customerDataSheet);
+      customer = customer[0].customer;
+    } catch (error) {
+      return ('Error reading customer name: ' + error.message);
+    };
+    try { 
+      sourcesDataSheet = ebmEntryBook.Sheets['Sources']; 
+      sources = XLSX.utils.sheet_to_json(sourcesDataSheet);
+    } catch (error) {
+      return ('Error reading sources: ' + error.message);
+    };
+    try { 
+      AFIEsDataSheet = ebmEntryBook.Sheets['AFIEs']; 
+      AFIEs = XLSX.utils.sheet_to_json(AFIEsDataSheet);
+    } catch (error) {
+      return ('Error reading AFIEs: ' + error.message);
     };
     try {
       ebmEntriesJSON = XLSX.utils.sheet_to_json(ebmEntrySheet);
@@ -329,12 +376,16 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
           const ocpdAmps = parseInt(entry['OCPD'].slice(0, ampsSymbolIndex)) || 0;
           const ocpdType = entry['OCPD'].indexOf("Fuse") !== -1 ? "Fuse" : 
             entry['OCPD'].indexOf("MCCB") !== -1 ? "MCCB" :
-            entry['OCPD'].indexOf("Force") !== -1 ? "FORCE" : "N/A";
+            entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'] : "N/A";
           const ocpdClass = entry['OCPD'].indexOf("Class RK5") !== -1 ? "RK5" :
             entry['OCPD'].indexOf("Class RK1") !== -1 ? "RK1" : 
-            entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].slice(entry['OCPD'].indexOf("<= ") + 3, entry['OCPD'].indexOf(" cal/cm2")) : "N/A";
+            entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].match(/<= (.*?) cal/)[1] : 
+            entry['OCPD'].match(/A (.*?) MCCB/)[1]
+          if (Array.isArray(ocpdClass)) {
+            ocpdClass = ocpdClass[1];
+          }
           const label_quantity = entry['Label Quantity'];
-          if (!name || !distance_ft || !source || !location || !ocpdAmps || !ocpdType || !ocpdClass || !label_quantity) {
+          if (!name || !distance_ft || !source || !location || !ocpdType || !ocpdClass || !label_quantity) {
             throw new Error(`Missing required field(s) in entry: ${JSON.stringify(entry)}. Please ensure all required fields are filled.`);
           }
           ebmJSONData.push({
@@ -354,7 +405,12 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
         return (null);
       }  
     });
-    return({ end_use_equipment: ebmJSONData });
+    return({ 
+      end_use_equipment: ebmJSONData,
+      customer: customer,
+      sources: sources,
+      AFIEs: AFIEs
+    });
   // });
 }
 

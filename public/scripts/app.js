@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', function() {
     const equipmentFileInput = document.getElementById('equipmentFileInput');
-    const customerConfigFileInput = document.getElementById('customerConfigFileInput');
+    // const customerConfigFileInput = document.getElementById('customerConfigFileInput');
     const customerTemplateFileInput = document.getElementById('customerTemplateFileInput');
     const uploadButton = document.getElementById('uploadButton');
     const messagesDiv = document.getElementById('messages');
@@ -13,14 +13,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateUploadButtonState() {
         const filesChosen = equipmentFileInput.files.length > 0 &&
-                            customerConfigFileInput.files.length > 0 &&
                             customerTemplateFileInput.files.length > 0;
         // const customerChosen = customerNameSelect.value !== '' && customerNameSelect.value !== 'Select Customer';
         uploadButton.disabled = !(filesChosen);// && customerChosen);
     }
 
     equipmentFileInput.addEventListener('change', updateUploadButtonState);
-    customerConfigFileInput.addEventListener('change', updateUploadButtonState);
+    // customerConfigFileInput.addEventListener('change', updateUploadButtonState);
     customerTemplateFileInput.addEventListener('change', updateUploadButtonState);
     // customerNameSelect.addEventListener('change', updateUploadButtonState);
 
@@ -33,14 +32,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    const selectedConfigFileNameSpan = document.getElementById('selectedConfigFileName');
-    customerConfigFileInput.addEventListener('change', function() {
-        if (customerConfigFileInput.files.length > 0) {
-            selectedConfigFileNameSpan.textContent = `Selected file: ${customerConfigFileInput.files[0].name}`;
-        } else {
-            selectedConfigFileNameSpan.textContent = '';
-        }
-    });
+    // const selectedConfigFileNameSpan = document.getElementById('selectedConfigFileName');
+    // customerConfigFileInput.addEventListener('change', function() {
+    //     if (customerConfigFileInput.files.length > 0) {
+    //         selectedConfigFileNameSpan.textContent = `Selected file: ${customerConfigFileInput.files[0].name}`;
+    //     } else {
+    //         selectedConfigFileNameSpan.textContent = '';
+    //     }
+    // });
 
     const selectedTemplateFileNameSpan = document.getElementById('selectedTemplateFileName');
     customerTemplateFileInput.addEventListener('change', function() {
@@ -54,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
     uploadButton.addEventListener('click', async function() {
         uploadButton.disabled = true;
         equipmentFileInput.disabled = true;
-        customerConfigFileInput.disabled = true;
+        // customerConfigFileInput.disabled = true;
         customerTemplateFileInput.disabled = true;
         messagesDiv.textContent = 'Processing... Please wait.';
         const file = equipmentFileInput.files[0];
@@ -64,7 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         const formData = new FormData();
         formData.append('equipmentDataFile', equipmentFileInput.files[0]);
-        formData.append('customerConfigFile', document.getElementById('customerConfigFileInput').files[0]);
+        // formData.append('customerConfigFile', document.getElementById('customerConfigFileInput').files[0]);
         formData.append('customerTemplateFile', document.getElementById('customerTemplateFileInput').files[0]);
         formData.append('jobNumber', document.getElementById('jobNumberInput').value);
         formData.append('noExcel', document.getElementById('noExcelCheckbox').checked);
@@ -85,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
             console.log(result);
             equipmentFileInput.disabled = false;
-            customerConfigFileInput.disabled = false;
+            // customerConfigFileInput.disabled = false;
             customerTemplateFileInput.disabled = false;
             if (result.error) {
                 updateUploadButtonState();
