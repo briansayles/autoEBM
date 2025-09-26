@@ -41,6 +41,7 @@ app.post('/upload', async (req, res) => {
     await templateFile.mv(templateUploadPath);
     try {
         // Call the applyEnergyBoundaryMethod function with the uploaded file and other parameters from headers
+        console.log('Calling applyEnergyBoundaryMethod')
         const autoEBMResult = await applyEnergyBoundaryMethod({ 
             dataFileName: uploadPath, 
             jobNumber: req.headers.jobnumber, 
@@ -57,9 +58,9 @@ app.post('/upload', async (req, res) => {
     } finally {
         console.log('Processing complete, cleaning up uploaded files if not already deleted.');
         // Delete the uploaded files after processing
-        await fs.unlink(uploadPath).catch((unlinkError) => {
-            console.error('Error deleting file:', unlinkError.message);
-        });
+        // await fs.unlink(uploadPath).catch((unlinkError) => {
+        //     console.error('Error deleting file:', unlinkError.message);
+        // });
         // await fs.unlink(configUploadPath).catch((unlinkError) => {
         //     console.error('Error deleting config file:', unlinkError.message);
         // });

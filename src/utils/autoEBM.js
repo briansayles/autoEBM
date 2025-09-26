@@ -2,9 +2,10 @@ import { __dirname, __filename } from '../config.js';
 import ebmStaticValues from '../static_data/ebmStaticValues.json' with {type: 'json'};
 import shockBoundaries from '../static_data/shockBoundaries.json' with {type: 'json'};
 import arcFlashBoundaries from '../static_data/arcFlashBoundaries.json' with {type: 'json'};
-import XLSX from 'xlsx';
+import XLSX from '@e965/xlsx';
 import PizZip from 'pizzip';
-import fs from 'fs';
+import * as fs from 'fs';
+XLSX.set_fs(fs);
 import Docxtemplater from 'docxtemplater';
 import expressionParser from "docxtemplater/expressions.js";
 import DocxMerger from 'docx-merger';
@@ -21,6 +22,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   ebmStaticValues.sort((a, b)=> b.kA - a.kA);
   let ebmEntries;
   try {
+    console.log('calling readEnergyBoundaryEntriesFromXLSX');
     ebmEntries = await readEnergyBoundaryEntriesFromXLSX(dataFileName);
   } catch (error) {
     return {
@@ -229,7 +231,7 @@ async function saveToExcel(excelOutputs, customerName, jobNumber, finishTimestam
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'AF Results');
     const excelFilename = toFilenameFriendlyFormat(`${customerName} AF Results ${jobNumber !== "" ? '(' + jobNumber + ') ' : ""}${finishTimestamp}`);
-    XLSX.writeFile(workbook, `${filePath}/${excelFilename}.xlsx`);
+    XLSX.writeFile(workbook, `${filePath}/${excelFilename}.XLSX`);
     const end = new Date().getTime();
     const time = end - start;
     console.log(`Save to Excel took ${time / 1000} seconds for ${excelOutputs.length} items.`);
@@ -329,13 +331,16 @@ async function createOutputZip(jobNumber, finishTimestamp, dataFileName, filePat
 async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
     let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook, customerDataSheet, sourcesDataSheet, AFIEsDataSheet, customer, sources, AFIEs;
     try {
+      console.log('reading ' + excelFilename);
       ebmEntryBook = XLSX.readFile(`${excelFilename}`);
     } catch (error) {
+      console.log(error.message);
       return (error.message);
     };
     try { 
       ebmEntrySheet = ebmEntryBook.Sheets['Order Form']; 
     } catch (error) {
+      console.log(error.message);
       return (error.message);
     };
     try { 
@@ -362,6 +367,12 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
     } catch (error) {
       return (error.message);
     };
+    console.log('ebmEntryBook: ' + ebmEntryBook);
+    console.log(ebmEntrySheet);
+    console.log(customerDataSheet);
+    console.log(sourcesDataSheet);
+    console.log(AFIEsDataSheet);
+
     if (!ebmEntriesJSON || ebmEntriesJSON.length == 0) {
       return (new Error(`Data file ${excelFilename} is not valid or contains no data. Please check the data file.`));
     }
