@@ -20,10 +20,9 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   const createMergeFile = noMerge == 'false';
   jobNumber = jobNumber || "";
   ebmStaticValues.sort((a, b)=> b.kA - a.kA);
-  let ebmEntries;
+  let dataFile;
   try {
-    console.log('calling readEnergyBoundaryEntriesFromXLSX');
-    ebmEntries = await readEnergyBoundaryEntriesFromXLSX(dataFileName);
+    dataFile = await readEnergyBoundaryEntriesFromXLSX(dataFileName);
   } catch (error) {
     return {
         message: error.message,
@@ -31,28 +30,19 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         zipOutput: null,
     };
   }
-  // const customerDataJSON = await import(configFileName, {with: {type: 'json'}});
-  // if (!customerDataJSON || !customerDataJSON.default || customerDataJSON.default.length == 0) {
-  //   throw new Error(`Configuration file ${configFileName} is not valid. Please check the customer configuration.`);
-  // }
   const templateData = await fsPromises.readFile(templateFileName, "binary");
   if (!templateData) {
     throw new Error(`Template file ${templateFileName} could not be read. Please check the template file.`);
   }
   const outputVariables = [];
   const excelOutputs = [];
-  // const customerData = customerDataJSON.default[0].customer;
-  // const sources = customerData.sources;
-  // console.log('sources:' + JSON.stringify(sources));
-  // console.log('sources from Excel: ' + JSON.stringify(ebmEntries.sources));
-  const customerName = ebmEntries.customer;
-  const sources = ebmEntries.sources;
+  const nonEBMOutputVariables = [];
+  const customerName = dataFile.customer;
+  const sources = dataFile.sources;
   const ieArray = [];
-  ebmEntries.AFIEs.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
-  // customerData.ie_breakpoints.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
-  console.log(ieArray);
+  dataFile.AFIEs.forEach(ie_breakpoint => ieArray.push(ie_breakpoint.calories));
   try {
-      ebmEntries.end_use_equipment.forEach((equipmentItem, equipmentIndex, equipmentArray) => {
+      dataFile.end_use_equipment.forEach((equipmentItem, equipmentIndex, equipmentArray) => {
         let recommendation = "";
         let recommendRK1 = false;
         let equipmentPPELevelRK1 = "";
@@ -63,7 +53,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         let equipmentPPELevel;
         let equipmentWorkingDistance;
         let ieBreakPoints;
-        console.log(`Processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}`);
+        console.log(`Processing EBM item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}`);
         if (equipmentItem.ocpd.type.indexOf("Force") == -1) {
           source = sources.filter((source)=> source.name == equipmentItem.source)[0];
         } else {
@@ -79,7 +69,6 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         if (!source) {
           throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No source found matching name ${equipmentItem.source}. Please check the data file and customer data.`);
         }
-        console.log(JSON.stringify(equipmentItem.ocpd));
         ebmStaticLine = ebmStaticValues.filter((ebmStaticValue) => 
           (ebmStaticValue.kA <= source.kA) * (JSON.stringify(ebmStaticValue.ocpd) == JSON.stringify(equipmentItem.ocpd)) * (ebmStaticValue.voltage == source.voltage) 
         )[0];
@@ -89,7 +78,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         equipmentWorkingDistance = ebmStaticLine.working_distance_in;
         ieBreakPoints = ebmStaticLine.boundaries.filter((boundary) =>  ieArray.includes(boundary.calories));
         equipmentIEBreakpoint = ieBreakPoints.filter(breakpoint => convertToNumber(breakpoint.distance_ft) >= convertToNumber(equipmentItem.distance_ft))[0]
-        equipmentPPELevel = ebmEntries.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpoint.calories)[0].name;
+        equipmentPPELevel = dataFile.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpoint.calories)[0].name;
         equipmentMaxIE = equipmentIEBreakpoint.calories;
         if (equipmentMaxIE > ieBreakPoints[0].calories) {
           if(equipmentItem.ocpd.class == "RK5") {
@@ -100,9 +89,9 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
             const ieBreakPointsRK1 = ebmStaticLineRK1.boundaries.filter((boundary) =>  ieArray.includes(boundary.calories));
             const equipmentIEBreakpointRK1 = ieBreakPointsRK1.filter(breakpoint => convertToNumber(breakpoint.distance_ft) >= convertToNumber(equipmentItem.distance_ft))[0]
             const equipmentMaxIERK1 = equipmentIEBreakpointRK1.calories;
-            equipmentPPELevelRK1 = ebmEntries.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpointRK1.calories)[0].name;
+            equipmentPPELevelRK1 = dataFile.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentIEBreakpointRK1.calories)[0].name;
             if (equipmentMaxIERK1 < equipmentMaxIE) {
-              recommendation += ` Using a class RK1 fuse will reduce the required PPE level from ${equipmentPPELevel} to ${ebmEntries.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentMaxIERK1)[0].name}.`;
+              recommendation += ` Using a class RK1 fuse will reduce the required PPE level from ${equipmentPPELevel} to ${dataFile.AFIEs.filter(ie_breakpoint => ie_breakpoint.calories == equipmentMaxIERK1)[0].name}.`;
               recommendRK1 = true;
             } else {
               recommendation += ` Using a class RK1 will not reduce the required PPE level from ${equipmentPPELevel}.`;
@@ -176,6 +165,32 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
           });
         }
       },);
+      dataFile.non_ebm_equipment.forEach((equipmentItem, equipmentIndex, equipmentArray) => {
+        console.log(`Processing non-EBM item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem['Title (Equipment Name)']}`);
+        outputVariables.push(
+          {
+            ...equipmentItem,
+            timestamp: new Date().toISOString(),
+            datestamp: new Date().toISOString().slice(0,10),
+            varAFB: equipmentItem["Arc Flash Boundary (in)"],
+            varAFBFeetInches: equipmentItem["Arc Flash Boundary (ft-in)"] || toFeetInches(equipmentItem["Arc Flash Boundary (in)"]),
+            varVoltage: equipmentItem["Voltage (kV)"]*1000 || equipmentItem["Voltage (V)"],
+            varkV: equipmentItem["Voltage (kV)"] || equipmentItem["Voltage (V)"] * 1000,
+            varRAB: equipmentItem["Restricted Approach Boundary (in)"],
+            varRABFeetInches: equipmentItem["Restricted Approach Boundary (ft-in)"] || toFeetInches(equipmentItem["Restricted Approach Boundary (in)"]),
+            varLAB: equipmentItem["Limited Approach Boundary (in)"],
+            varLABFeetInches: equipmentItem["Limited Approach Boundary (ft-in)"] || toFeetInches(equipmentItem["Limited Approach Boundary (in)"]),
+            varEquipmentName: equipmentItem["Title (Equipment Name)"],
+            varFedFrom: equipmentItem["Source"] != "" ? equipmentItem["Source"] : equipmentItem["Source Protective Device"],
+            varEquipmentLocation: equipmentItem["Equipment Location (Columns)"] || "",
+            varPPE: equipmentItem["PPE Level (Site-Specific)"],
+            varMaxIE: equipmentItem["Incident Energy (cal/cm2)"],
+            varWorkingDistance: equipmentItem["Working Distance (in)"],
+            varWorkingDistanceFeetInches: equipmentItem["Working Distance (ft-in)"] || toFeetInches(equipmentItem["Working Distance (in)"]),
+            varQuantity: equipmentItem["Label Quantity"] || 1,
+            varJobNumber: jobNumber
+          });
+      },);
   } catch (error) {
       return {
         message: error.message,
@@ -183,12 +198,13 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
         zipOutput: null,
       };    
   }
+  // console.log(outputVariables);
   var end = new Date().getTime();
   var time = end - start;
   start = new Date().getTime();
   let excelResult;
   let wordResult;
-  let zipResult;
+  // let zipResult;
   let zipOutput;
   const finishTimestamp = new Date().toISOString().replace(/:/g, '-').slice(0,19);
   const outputFilePath = await fsPromises.mkdir(`./output/${finishTimestamp}`, { recursive: true });
@@ -217,7 +233,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   end = new Date().getTime();
   time = end - start0;
   return {
-    message: `autoEBM processing complete for ${ebmEntries.end_use_equipment.length} entries in ${time/1000} seconds`, 
+    message: `autoEBM processing complete for ${dataFile.end_use_equipment.length} entries in ${time/1000} seconds`, 
     error: false,
     zipOutput: zipOutput,
   };
@@ -329,7 +345,7 @@ async function createOutputZip(jobNumber, finishTimestamp, dataFileName, filePat
 }
 
 async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
-    let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook, customerDataSheet, sourcesDataSheet, AFIEsDataSheet, customer, sources, AFIEs;
+    let ebmEntriesJSON, ebmEntrySheet, ebmEntryBook, customerDataSheet, sourcesDataSheet, AFIEsDataSheet, customer, sources, AFIEs, nonEBMEntrySheet, nonEBMEntriesJSON;
     try {
       console.log('reading ' + excelFilename);
       ebmEntryBook = XLSX.readFile(`${excelFilename}`);
@@ -338,10 +354,17 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
       return (error.message);
     };
     try { 
-      ebmEntrySheet = ebmEntryBook.Sheets['Order Form']; 
+      ebmEntrySheet = ebmEntryBook.Sheets['Order Form (EBM)']; 
+      ebmEntriesJSON = XLSX.utils.sheet_to_json(ebmEntrySheet);
     } catch (error) {
       console.log(error.message);
       return (error.message);
+    };
+    try {
+      nonEBMEntrySheet = ebmEntryBook.Sheets['Order Form (Non-EBM)'];
+      nonEBMEntriesJSON = XLSX.utils.sheet_to_json(nonEBMEntrySheet);
+    } catch (error) {
+      console.log(error.message);
     };
     try { 
       customerDataSheet = ebmEntryBook.Sheets['Customer']; 
@@ -362,65 +385,57 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
     } catch (error) {
       return ('Error reading AFIEs: ' + error.message);
     };
-    try {
-      ebmEntriesJSON = XLSX.utils.sheet_to_json(ebmEntrySheet);
-    } catch (error) {
-      return (error.message);
-    };
-    console.log('ebmEntryBook: ' + ebmEntryBook);
-    console.log(ebmEntrySheet);
-    console.log(customerDataSheet);
-    console.log(sourcesDataSheet);
-    console.log(AFIEsDataSheet);
-
+    let ebmJSONData = [];
     if (!ebmEntriesJSON || ebmEntriesJSON.length == 0) {
+      console.log('No EBM Entries in the datafile.');
       return (new Error(`Data file ${excelFilename} is not valid or contains no data. Please check the data file.`));
+    } else {
+      ebmEntriesJSON.forEach((entry) => {
+        try {
+            const name = entry['Title (Equipment Name)'];
+            const distance_ft = entry['Circuit Length (ft)'];
+            const source = entry['Source'];
+            const location = entry['Equipment Location (Columns)'];
+            const ampsSymbolIndex = entry['OCPD'].indexOf("A ");
+            const ocpdAmps = parseInt(entry['OCPD'].slice(0, ampsSymbolIndex)) || 0;
+            const ocpdType = entry['OCPD'].indexOf("Fuse") !== -1 ? "Fuse" : 
+              entry['OCPD'].indexOf("MCCB") !== -1 ? "MCCB" :
+              entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'] : "N/A";
+            const ocpdClass = entry['OCPD'].indexOf("Class RK5") !== -1 ? "RK5" :
+              entry['OCPD'].indexOf("Class RK1") !== -1 ? "RK1" : 
+              entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].match(/<= (.*?) cal/)[1] : 
+              entry['OCPD'].match(/A (.*?) MCCB/)[1]
+            if (Array.isArray(ocpdClass)) {
+              ocpdClass = ocpdClass[1];
+            }
+            const label_quantity = entry['Label Quantity'];
+            if (!name || !distance_ft || !source || !location || !ocpdType || !ocpdClass || !label_quantity) {
+              throw new Error(`Missing required field(s) in entry: ${JSON.stringify(entry)}. Please ensure all required fields are filled.`);
+            }
+            ebmJSONData.push({
+              name,
+              location,
+              distance_ft,
+              source,
+              ocpd: {
+                amps: ocpdAmps,
+                type: ocpdType,
+                class: ocpdClass
+              },
+              label_quantity
+            });
+        } catch (error) {
+          console.log('Error processing entry:', entry, error.message);
+          return (null);
+        }  
+      });
     }
-    const ebmJSONData = [];
-    ebmEntriesJSON.forEach((entry) => {
-      try {
-          const name = entry['Title (Equipment Name)'];
-          const distance_ft = entry['Circuit Length (ft)'];
-          const source = entry['Source'];
-          const location = entry['Equipment Location (Columns)'];
-          const ampsSymbolIndex = entry['OCPD'].indexOf("A ");
-          const ocpdAmps = parseInt(entry['OCPD'].slice(0, ampsSymbolIndex)) || 0;
-          const ocpdType = entry['OCPD'].indexOf("Fuse") !== -1 ? "Fuse" : 
-            entry['OCPD'].indexOf("MCCB") !== -1 ? "MCCB" :
-            entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'] : "N/A";
-          const ocpdClass = entry['OCPD'].indexOf("Class RK5") !== -1 ? "RK5" :
-            entry['OCPD'].indexOf("Class RK1") !== -1 ? "RK1" : 
-            entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].match(/<= (.*?) cal/)[1] : 
-            entry['OCPD'].match(/A (.*?) MCCB/)[1]
-          if (Array.isArray(ocpdClass)) {
-            ocpdClass = ocpdClass[1];
-          }
-          const label_quantity = entry['Label Quantity'];
-          if (!name || !distance_ft || !source || !location || !ocpdType || !ocpdClass || !label_quantity) {
-            throw new Error(`Missing required field(s) in entry: ${JSON.stringify(entry)}. Please ensure all required fields are filled.`);
-          }
-          ebmJSONData.push({
-            name,
-            location,
-            distance_ft,
-            source,
-            ocpd: {
-              amps: ocpdAmps,
-              type: ocpdType,
-              class: ocpdClass
-            },
-            label_quantity
-          });
-      } catch (error) {
-        console.log('Error processing entry:', entry, error.message);
-        return (null);
-      }  
-    });
     return({ 
       end_use_equipment: ebmJSONData,
       customer: customer,
       sources: sources,
-      AFIEs: AFIEs
+      AFIEs: AFIEs,
+      non_ebm_equipment: nonEBMEntriesJSON,
     });
   // });
 }
