@@ -11,6 +11,38 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Empties the upload directory on server start.
+const uploadDir = path.join(__dirname, '../upload');
+fs.readdir(uploadDir)
+    .then(files => {
+        return Promise.all(files.map(file => fs.unlink(path.join(uploadDir, file))));
+    })
+    .then(() => {
+        console.log('Upload directory cleaned on server start.');
+    })
+    .catch(err => {
+        console.error('Error cleaning upload directory:', err);
+    }
+);
+
+// Empties the upload directory on server start.
+const outputDir = path.join(__dirname, '../output');
+fs.readdir(outputDir)
+    .then(files => {
+        return Promise.all(files.map(file => fs.unlink(path.join(outputDir, file))));
+    })
+    .then(() => {
+        console.log('Output directory cleaned on server start.');
+    })
+    .catch(err => {
+        console.error('Error cleaning output directory:', err);
+    }
+);
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+
 // Middleware for file uploads
 app.use(fileUpload());
 
@@ -58,9 +90,9 @@ app.post('/upload', async (req, res) => {
     } finally {
         console.log('Processing complete, cleaning up uploaded files if not already deleted.');
         // Delete the uploaded files after processing
-        // await fs.unlink(uploadPath).catch((unlinkError) => {
-        //     console.error('Error deleting file:', unlinkError.message);
-        // });
+        await fs.unlink(uploadPath).catch((unlinkError) => {
+            console.error('Error deleting file:', unlinkError.message);
+        });
         // await fs.unlink(configUploadPath).catch((unlinkError) => {
         //     console.error('Error deleting config file:', unlinkError.message);
         // });
@@ -84,6 +116,12 @@ app.get('/download', async (req, res, next) => {
       if (err) {
           console.error('Error downloading file:', err.message);
           return res.status(500).send('Error downloading file.');
+      } else {
+            console.log('File downloaded successfully:', filePath);
+            // Delete the file after download
+            fs.unlink(filePath).catch((unlinkError) => {
+                console.error('Error deleting downloaded file:', unlinkError.message);
+            });
       }
   });
 });
