@@ -154,7 +154,10 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
           if (createExcel) {
             excelOutputs.push(
             {
-              ...equipmentItem, 
+              ...equipmentItem,
+              "OCPD Amps (A)": equipmentItem.ocpd.amps,
+              "OCPD Type": equipmentItem.ocpd.type,
+              "OCPD Class": equipmentItem.ocpd.class,
               "Arc Flash PPE Level": equipmentPPELevel,
               "Arc Flash Max IE at Working Distance (cal/cm2)": equipmentMaxIE,
               "Working Distance (in)": equipmentWorkingDistance,
@@ -424,7 +427,7 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
       ebmEntriesJSON.forEach((entry) => {
         try {
             const name = entry['Title (Equipment Name)'];
-            const distance_ft = entry['Circuit Length (ft)'];
+            const distance_ft = entry['Circuit Length (ft)'] || entry[' Circuit Length (ft) '];
             const source = entry['Source'];
             const location = entry['Equipment Location (Columns)'];
             const ampsSymbolIndex = entry['OCPD'].indexOf("A ");

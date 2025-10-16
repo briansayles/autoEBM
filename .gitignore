@@ -1,0 +1,40 @@
+# Ignore virtual environments
+venv/
+env/
+
+# Ignore environment variables and secrets
+*.env
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore log files
+*.log
+
+# Ignore build and distribution folders
+build/
+dist/
+*.egg-info/
+
+# Ignore IDE/editor folders
+.vscode/
+.idea/
+*.swp
+*.sublime-workspace
+*.sublime-project
+
+# Ignore node modules (if using Node.js)
+node_modules/
+
+# Ignore all customer specific files
+customer_files/
+
+# Ignore uploaded files
+uploads/
+
+#Ignore output files
+output/
+
+#Ignore static data files
+static_data/
