@@ -84,7 +84,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
             throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No source found matching name ${equipmentItem.source}. Please check the data file and customer data.`);
           }
           ebmStaticLine = ebmStaticValues.filter((ebmStaticValue) => 
-            (ebmStaticValue.kA <= source.kA) * (JSON.stringify(ebmStaticValue.ocpd) == JSON.stringify(equipmentItem.ocpd)) * (ebmStaticValue.voltage == source.voltage) 
+            (ebmStaticValue.kA <= source.kA) * (JSON.stringify(ebmStaticValue.ocpd) == JSON.stringify(equipmentItem.ocpd)) * (ebmStaticValue.voltage >= source.voltage) 
           )[0];
           if (!ebmStaticLine) {
             throw new Error(`Error processing item ${equipmentIndex + 1} of ${equipmentArray.length}: ${equipmentItem.name}. No EBM data found for source ${source.name} with ${source.kA} kA, ${source.voltage} V, and OCPD ${equipmentItem.ocpd.amps}A ${equipmentItem.ocpd.type} (${equipmentItem.ocpd.class}). Please check the data file and customer data.`);
@@ -437,6 +437,8 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
               entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'] : "N/A";
             const ocpdClass = entry['OCPD'].indexOf("Class RK5") !== -1 ? "RK5" :
               entry['OCPD'].indexOf("Class RK1") !== -1 ? "RK1" : 
+              entry['OCPD'].indexOf("Class L") !== -1 ? "L" : 
+              entry['OCPD'].indexOf("Class J") !== -1 ? "J" : 
               entry['OCPD'].indexOf("Force") !== -1 ? entry['OCPD'].match(/<= (.*?) cal/)[1] : 
               entry['OCPD'].match(/A (.*?) MCCB/)[1]
             if (Array.isArray(ocpdClass)) {
