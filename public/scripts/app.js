@@ -7,13 +7,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadButton = document.getElementById('uploadButton');
     const messagesDiv = document.getElementById('messages');
     // const customerNameSelect = document.getElementById('customerNameSelect');
+    const noLabelsCheckbox = document.getElementById('noLabelsCheckbox');
+    const noMergeCheckbox = document.getElementById('noMergeCheckbox');
 
     // Disable uploadButton initially
     uploadButton.disabled = true;
 
     function updateUploadButtonState() {
         const filesChosen = equipmentFileInput.files.length > 0 &&
-                            customerTemplateFileInput.files.length > 0;
+                            (customerTemplateFileInput.files.length > 0 || noLabelsCheckbox.checked);
         // const customerChosen = customerNameSelect.value !== '' && customerNameSelect.value !== 'Select Customer';
         uploadButton.disabled = !(filesChosen);// && customerChosen);
     }
@@ -64,7 +66,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('equipmentDataFile', equipmentFileInput.files[0]);
         // formData.append('customerConfigFile', document.getElementById('customerConfigFileInput').files[0]);
-        formData.append('customerTemplateFile', document.getElementById('customerTemplateFileInput').files[0]);
+        if (!document.getElementById('noLabelsCheckbox').checked) {
+            formData.append('customerTemplateFile', document.getElementById('customerTemplateFileInput').files[0]);
+        } else {
+            formData.append('customerTemplateFile', new Blob());
+        }
         formData.append('jobNumber', document.getElementById('jobNumberInput').value);
         formData.append('noExcel', document.getElementById('noExcelCheckbox').checked);
         formData.append('noLabels', document.getElementById('noLabelsCheckbox').checked);
@@ -105,9 +111,6 @@ document.addEventListener('DOMContentLoaded', function() {
         updateUploadButtonState();
     });
 
-    const noLabelsCheckbox = document.getElementById('noLabelsCheckbox');
-    const noMergeCheckbox = document.getElementById('noMergeCheckbox');
-
     noLabelsCheckbox.addEventListener('change', function () {
         if (noLabelsCheckbox.checked) {
             noMergeCheckbox.checked = true;
@@ -116,5 +119,6 @@ document.addEventListener('DOMContentLoaded', function() {
             noMergeCheckbox.checked = false;
             noMergeCheckbox.disabled = false;
         }
+        updateUploadButtonState();
     });
 });

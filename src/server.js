@@ -51,15 +51,14 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Endpoint to handle file upload and process it
 app.post('/upload', async (req, res) => {
-    if (!req.files || Object.keys(req.files).length < 2) {
+    if (!req.files || Object.keys(req.files).length < 1) {
         return res.send({ message: 'Missing required files in upload.' });
     }
     console.log('File upload(s) received');
     const dataFile = req.files.equipmentDataFile;
     // const configFile = req.files.customerConfigFile;
-    const templateFile = req.files.customerTemplateFile;
-    if (!dataFile || !templateFile) {
-        return res.send({ message: 'Please upload all required files: equipmentDataFile, customerTemplateFile.' });
+    if (!dataFile) {
+        return res.send({ message: 'Please upload all required files: equipmentDataFile' });
     }
     // console.log(`Received file: ${dataFile.name}`);
     // console.log(`Received config file: ${configFile.name}`);
@@ -69,8 +68,13 @@ app.post('/upload', async (req, res) => {
     await dataFile.mv(uploadPath);
     // const configUploadPath = path.join(__dirname, '../upload', configFile.name);
     // await configFile.mv(configUploadPath);
-    const templateUploadPath = path.join(__dirname, '../upload', templateFile.name);
-    await templateFile.mv(templateUploadPath);
+    if (!req.headers.noLabels) {
+        const templateFile = req.files.customerTemplateFile;
+        const templateUploadPath = path.join(__dirname, '../upload', templateFile.name);
+        await templateFile.mv(templateUploadPath);
+    } else {
+        var templateUploadPath = "";
+    }
     try {
         // Call the applyEnergyBoundaryMethod function with the uploaded file and other parameters from headers
         console.log('Calling applyEnergyBoundaryMethod')

@@ -35,10 +35,6 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   // console.log(`Sources: ${dataFile.sources.map(source => source.name).join(', ')}`);
   // console.log(`AFIEs: ${dataFile.AFIEs.map(ie => ie.name).join(', ')}`);
 
-  const templateData = await fsPromises.readFile(templateFileName, "binary");
-  if (!templateData) {
-    throw new Error(`Template file ${templateFileName} could not be read. Please check the template file.`);
-  }
   const outputVariables = [];
   const excelOutputs = [];
   const nonEBMExcelOutputs = [];
@@ -141,7 +137,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
               varLAB: equipmentLimitedApproachBoundaryInches,
               varLABFeetInches: toFeetInches(equipmentLimitedApproachBoundaryInches),
               varEquipmentName: equipmentItem.name,
-              varFedFrom: source.name,
+              varFedFrom: (equipmentItem.fed_from_text && equipmentItem.fed_from_text != "") ? equipmentItem.fed_from_text : source.name,
               varEquipmentLocation: equipmentItem.location,
               varPPE: equipmentPPELevel,
               varMaxIE: equipmentMaxIE,
@@ -231,7 +227,6 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   let zipOutput;
   const finishTimestamp = new Date().toISOString().replace(/:/g, '-').slice(0,19);
   const outputFilePath = await fsPromises.mkdir(`./output/${finishTimestamp}`, { recursive: true });
-  await fsPromises.mkdir(`./output/${finishTimestamp}/individual labels`, { recursive: true });
 
   if (createExcel) {
     try {
@@ -242,6 +237,11 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   }
   if (createIndividualLabels) {
     try {
+      const templateData = await fsPromises.readFile(templateFileName, "binary");
+      if (!templateData) {
+        throw new Error(`Template file ${templateFileName} could not be read. Please check the template file.`);
+      }
+      await fsPromises.mkdir(`./output/${finishTimestamp}/individual labels`, { recursive: true });
       wordResult = await generateMailMergeDOCX(outputVariables, customerName, createMergeFile, jobNumber, finishTimestamp, templateData, outputFilePath);
     } catch (err) {
       console.log(err.message);
@@ -256,7 +256,7 @@ export async function applyEnergyBoundaryMethod({dataFileName, noExcel, noLabels
   end = new Date().getTime();
   time = end - start0;
   return {
-    message: `autoEBM processing complete for ${dataFile.end_use_equipment.length} entries in ${time/1000} seconds`, 
+    message: `Processing complete for ${dataFile.end_use_equipment.length} EBM and ${dataFile.non_ebm_equipment.length} non-EBM entries in ${time/1000} seconds`, 
     error: false,
     zipOutput: zipOutput,
   };
@@ -445,6 +445,7 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
               ocpdClass = ocpdClass[1];
             }
             const label_quantity = entry['Label Quantity'];
+            const fed_from_text = entry['Fed From Text'];
             if (!name || !distance_ft || !source || !location || !ocpdType || !ocpdClass || !label_quantity) {
               throw new Error(`Missing required field(s) in entry: ${JSON.stringify(entry)}. Please ensure all required fields are filled.`);
             }
@@ -458,7 +459,8 @@ async function readEnergyBoundaryEntriesFromXLSX(excelFilename) {
                 type: ocpdType,
                 class: ocpdClass
               },
-              label_quantity
+              label_quantity,
+              fed_from_text
             });
         } catch (error) {
           console.log('Error processing entry:', entry, error.message);
